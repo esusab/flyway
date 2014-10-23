@@ -40,7 +40,7 @@ public class OracleDbSupport extends DbSupport {
 
     public String getDbName() {
         return "oracle";
-    }
+    }      
 
     public String getCurrentUserFunction() {
         return "USER";

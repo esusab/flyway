@@ -45,7 +45,7 @@ public class PostgreSQLTable extends Table {
 
     @Override
     protected boolean doExists() throws SQLException {
-        return exists(null, schema, name);
+        return exists(null, schema, name.toLowerCase());
     }
 
     @Override

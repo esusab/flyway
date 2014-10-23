@@ -71,11 +71,11 @@ public class PostgreSQLDbSupport extends DbSupport {
     }
 
     public String getBooleanTrue() {
-        return "TRUE";
+        return "1";
     }
 
     public String getBooleanFalse() {
-        return "FALSE";
+        return "0";
     }
 
     public SqlStatementBuilder createSqlStatementBuilder() {
@@ -84,7 +84,7 @@ public class PostgreSQLDbSupport extends DbSupport {
 
     @Override
     public String doQuote(String identifier) {
-        return "\"" + StringUtils.replaceAll(identifier, "\"", "\"\"") + "\"";
+        return identifier;
     }
 
     @Override

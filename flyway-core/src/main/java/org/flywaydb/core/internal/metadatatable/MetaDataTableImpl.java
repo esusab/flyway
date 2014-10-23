@@ -15,6 +15,15 @@
  */
 package org.flywaydb.core.internal.metadatatable;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.flywaydb.core.EsusFlywayTables;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.MigrationType;
 import org.flywaydb.core.api.MigrationVersion;
@@ -23,7 +32,6 @@ import org.flywaydb.core.internal.dbsupport.JdbcTemplate;
 import org.flywaydb.core.internal.dbsupport.Schema;
 import org.flywaydb.core.internal.dbsupport.SqlScript;
 import org.flywaydb.core.internal.dbsupport.Table;
-import org.flywaydb.core.internal.util.scanner.classpath.ClassPathResource;
 import org.flywaydb.core.internal.util.PlaceholderReplacer;
 import org.flywaydb.core.internal.util.StopWatch;
 import org.flywaydb.core.internal.util.StringUtils;
@@ -31,14 +39,7 @@ import org.flywaydb.core.internal.util.TimeFormat;
 import org.flywaydb.core.internal.util.jdbc.RowMapper;
 import org.flywaydb.core.internal.util.logging.Log;
 import org.flywaydb.core.internal.util.logging.LogFactory;
-
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import org.flywaydb.core.internal.util.scanner.classpath.ClassPathResource;
 
 /**
  * Supports reading and writing to the metadata table.
@@ -90,12 +91,12 @@ public class MetaDataTableImpl implements MetaDataTable {
 
         LOG.info("Creating Metadata table: " + table);
 
-        String resourceName = "org/flywaydb/core/internal/dbsupport/" + dbSupport.getDbName() + "/createMetaDataTable.sql";
+        String resourceName = "org/flywaydb/core/internal/dbsupport/resource/" + dbSupport.getDbName() + "/createMetaDataTable.sql";
         String source = new ClassPathResource(resourceName, classLoader).loadAsString("UTF-8");
 
         Map<String, String> placeholders = new HashMap<String, String>();
-        placeholders.put("schema", table.getSchema().getName());
-        placeholders.put("table", table.getName());
+        placeholders.put(new String("schema"), table.getSchema().getName());
+        placeholders.put(new String("table"), table.getName());
         String sourceNoPlaceholders = new PlaceholderReplacer(placeholders, "${", "}").replacePlaceholders(source);
 
         SqlScript sqlScript = new SqlScript(sourceNoPlaceholders, dbSupport);
@@ -119,30 +120,31 @@ public class MetaDataTableImpl implements MetaDataTable {
             int versionRank = calculateVersionRank(version);
 
             jdbcTemplate.update("UPDATE " + table
-                    + " SET " + dbSupport.quote("version_rank") + " = " + dbSupport.quote("version_rank")
-                    + " + 1 WHERE " + dbSupport.quote("version_rank") + " >= ?", versionRank);
-            jdbcTemplate.update("INSERT INTO " + table
-                    + " (" + dbSupport.quote("version_rank")
-                    + "," + dbSupport.quote("installed_rank")
-                    + "," + dbSupport.quote("version")
-                    + "," + dbSupport.quote("description")
-                    + "," + dbSupport.quote("type")
-                    + "," + dbSupport.quote("script")
-                    + "," + dbSupport.quote("checksum")
-                    + "," + dbSupport.quote("installed_by")
-                    + "," + dbSupport.quote("execution_time")
-                    + "," + dbSupport.quote("success")
-                    + ")"
-                    + " VALUES (?, ?, ?, ?, ?, ?, ?, " + dbSupport.getCurrentUserFunction() + ", ?, ?)",
-                    versionRank,
-                    calculateInstalledRank(),
-                    version.toString(),
-                    appliedMigration.getDescription(),
-                    appliedMigration.getType().name(),
-                    appliedMigration.getScript(),
-                    appliedMigration.getChecksum(),
-                    appliedMigration.getExecutionTime(),
-                    appliedMigration.isSuccess());
+                    + " SET " + dbSupport.quote(new String[] { EsusFlywayTables.getVersionRank() }) + " = " + dbSupport.quote(new String[] { EsusFlywayTables.getVersionRank() })
+                    + " + 1 WHERE " + dbSupport.quote(new String[] { EsusFlywayTables.getVersionRank() }) + " >= ?", new Object[] { Integer.valueOf(versionRank) });
+            jdbcTemplate.update("INSERT INTO " + this.table + 
+                    " (" + this.dbSupport.quote(new String[] { EsusFlywayTables.getVersionRank() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getInstalledRank() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getVersion() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getDescription() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getType() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getScript() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getChecksum() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getInstalledBy() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getExecutionTime() }) + 
+                    "," + this.dbSupport.quote(new String[] { EsusFlywayTables.getSuccess() }) + 
+                    ")" + 
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, " + this.dbSupport.getCurrentUserFunction() + ", ?, ?)",
+                    versionRank, 
+                    calculateInstalledRank(), 
+                    version.toString(), 
+                    appliedMigration.getDescription(), 
+                    appliedMigration.getType().name(), 
+                    appliedMigration.getScript(), 
+                    appliedMigration.getChecksum(), 
+                    Integer.valueOf(appliedMigration.getExecutionTime()), 
+                    (appliedMigration.isSuccess()? 1 : 0)
+            );
             LOG.debug("MetaData table " + table + " successfully updated to reflect changes");
         } catch (SQLException e) {
             throw new FlywayException("Unable to insert row for version '" + version + "' in metadata table " + table, e);
@@ -155,7 +157,7 @@ public class MetaDataTableImpl implements MetaDataTable {
      * @return The installed rank.
      */
     private int calculateInstalledRank() throws SQLException {
-        int currentMax = jdbcTemplate.queryForInt("SELECT MAX(" + dbSupport.quote("installed_rank") + ")"
+        int currentMax = jdbcTemplate.queryForInt("SELECT MAX(" + dbSupport.quote(new String [] {EsusFlywayTables.getInstalledRank()}) + ")"
                 + " FROM " + table);
         return currentMax + 1;
     }
@@ -167,7 +169,7 @@ public class MetaDataTableImpl implements MetaDataTable {
      * @return The rank.
      */
     private int calculateVersionRank(MigrationVersion version) throws SQLException {
-        List<String> versions = jdbcTemplate.queryForStringList("select " + dbSupport.quote("version") + " from " + table);
+        List<String> versions = jdbcTemplate.queryForStringList("select " + dbSupport.quote(new String [] {EsusFlywayTables.getVersion()}) + " from " + table);
 
         List<MigrationVersion> migrationVersions = new ArrayList<MigrationVersion>();
         for (String versionStr : versions) {
@@ -202,22 +204,22 @@ public class MetaDataTableImpl implements MetaDataTable {
         }
 
         createIfNotExists();
-
-        String query = "SELECT " + dbSupport.quote("version_rank")
-                + "," + dbSupport.quote("installed_rank")
-                + "," + dbSupport.quote("version")
-                + "," + dbSupport.quote("description")
-                + "," + dbSupport.quote("type")
-                + "," + dbSupport.quote("script")
-                + "," + dbSupport.quote("checksum")
-                + "," + dbSupport.quote("installed_on")
-                + "," + dbSupport.quote("installed_by")
-                + "," + dbSupport.quote("execution_time")
-                + "," + dbSupport.quote("success")
+//        new String[] { EsusFlywayTables.get }
+        String query = "SELECT " + dbSupport.quote(new String[] { EsusFlywayTables.getVersionRank() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getInstalledRank() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getVersion() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getDescription() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getType() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getScript() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getChecksum() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getInstalledOn() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getInstalledBy() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getExecutionTime() })
+                + "," + dbSupport.quote(new String[] { EsusFlywayTables.getSuccess() })
                 + " FROM " + table;
 
         if (migrationTypes.length > 0) {
-            query += " WHERE " + dbSupport.quote("type") + " IN (";
+            query += " WHERE " + dbSupport.quote(new String[] { EsusFlywayTables.getType() }) + " IN (";
             for (int i = 0; i < migrationTypes.length; i++) {
                 if (i > 0) {
                     query += ",";
@@ -225,30 +227,30 @@ public class MetaDataTableImpl implements MetaDataTable {
                 query += "'" + migrationTypes[i] + "'";
             }
             query += ")";
-        }
+        } 
 
-        query += " ORDER BY " + dbSupport.quote("version_rank");
+        query += " ORDER BY " + dbSupport.quote(new String[] { EsusFlywayTables.getVersionRank() });
 
         try {
             return jdbcTemplate.query(query, new RowMapper<AppliedMigration>() {
                 public AppliedMigration mapRow(final ResultSet rs) throws SQLException {
-                    Integer checksum = rs.getInt("checksum");
+                    Integer checksum = rs.getInt(EsusFlywayTables.getChecksum());
                     if (rs.wasNull()) {
                         checksum = null;
                     }
 
                     return new AppliedMigration(
-                            rs.getInt("version_rank"),
-                            rs.getInt("installed_rank"),
-                            MigrationVersion.fromVersion(rs.getString("version")),
-                            rs.getString("description"),
-                            MigrationType.valueOf(rs.getString("type")),
-                            rs.getString("script"),
+                            rs.getInt(EsusFlywayTables.getVersionRank()),
+                            rs.getInt(EsusFlywayTables.getInstalledRank()),
+                            MigrationVersion.fromVersion(rs.getString(EsusFlywayTables.getVersion())),
+                            rs.getString(EsusFlywayTables.getDescription()),
+                            MigrationType.valueOf(rs.getString(EsusFlywayTables.getType())),
+                            rs.getString(EsusFlywayTables.getScript()),
                             checksum,
-                            rs.getTimestamp("installed_on"),
-                            rs.getString("installed_by"),
-                            rs.getInt("execution_time"),
-                            rs.getBoolean("success")
+                            rs.getTimestamp(EsusFlywayTables.getInstalledOn()),
+                            rs.getString(EsusFlywayTables.getInstalledBy()),
+                            rs.getInt(EsusFlywayTables.getExecutionTime()),
+                            rs.getBoolean(EsusFlywayTables.getSuccess())
                     );
                 }
             });
@@ -275,7 +277,7 @@ public class MetaDataTableImpl implements MetaDataTable {
 
         try {
             int failedCount = jdbcTemplate.queryForInt("SELECT COUNT(*) FROM " + table
-                    + " WHERE " + dbSupport.quote("success") + "=" + dbSupport.getBooleanFalse());
+                    + " WHERE " + dbSupport.quote(new String [] {EsusFlywayTables.getSuccess()}) + "=" + dbSupport.getBooleanFalse());
             if (failedCount == 0) {
                 LOG.info("Repair of metadata table " + table + " not necessary. No failed migration detected.");
                 return;
@@ -289,7 +291,7 @@ public class MetaDataTableImpl implements MetaDataTable {
 
         try {
             jdbcTemplate.execute("DELETE FROM " + table
-                    + " WHERE " + dbSupport.quote("success") + " = " + dbSupport.getBooleanFalse());
+                    + " WHERE " + dbSupport.quote(new String [] {EsusFlywayTables.getSuccess()}) + " = " + dbSupport.getBooleanFalse());
         } catch (SQLException e) {
             throw new FlywayException("Unable to repair metadata table " + table, e);
         }
@@ -319,7 +321,7 @@ public class MetaDataTableImpl implements MetaDataTable {
 
         try {
             int count = jdbcTemplate.queryForInt(
-                    "SELECT COUNT(*) FROM " + table + " WHERE " + dbSupport.quote("type") + "='SCHEMA'");
+                    "SELECT COUNT(*) FROM " + table + " WHERE " + dbSupport.quote(new String [] {EsusFlywayTables.getType()}) + "='SCHEMA'");
             return count > 0;
         } catch (SQLException e) {
             throw new FlywayException("Unable to check whether the metadata table " + table + " has a schema marker migration", e);
@@ -336,7 +338,7 @@ public class MetaDataTableImpl implements MetaDataTable {
 
         try {
             int count = jdbcTemplate.queryForInt(
-                    "SELECT COUNT(*) FROM " + table + " WHERE " + dbSupport.quote("type") + "='INIT'");
+                    "SELECT COUNT(*) FROM " + table + " WHERE " + dbSupport.quote(new String [] {EsusFlywayTables.getType()}) + "='INIT'");
             return count > 0;
         } catch (SQLException e) {
             throw new FlywayException("Unable to check whether the metadata table " + table + " has an init marker migration", e);
@@ -359,7 +361,7 @@ public class MetaDataTableImpl implements MetaDataTable {
 
         try {
             int count = jdbcTemplate.queryForInt(
-                    "SELECT COUNT(*) FROM " + table + " WHERE " + dbSupport.quote("type") + " NOT IN ('SCHEMA', 'INIT')");
+                    "SELECT COUNT(*) FROM " + table + " WHERE " + dbSupport.quote(new String [] {EsusFlywayTables.getType()}) + " NOT IN ('SCHEMA', 'INIT')");
             return count > 0;
         } catch (SQLException e) {
             throw new FlywayException("Unable to check whether the metadata table " + table + " has applied migrations", e);
@@ -369,8 +371,8 @@ public class MetaDataTableImpl implements MetaDataTable {
     @Override
     public void updateChecksum(MigrationVersion version, Integer checksum) {
         try {
-            jdbcTemplate.update("UPDATE " + table + " SET " + dbSupport.quote("checksum") + "=" + checksum
-                    + " WHERE " + dbSupport.quote("version") + "='" + version + "'");
+            jdbcTemplate.update("UPDATE " + table + " SET " + dbSupport.quote(new String [] {EsusFlywayTables.getChecksum()}) + "=" + checksum
+                    + " WHERE " + dbSupport.quote(new String [] {EsusFlywayTables.getVersion()}) + "='" + version + "'");
         } catch (SQLException e) {
             throw new FlywayException("Unable to update checksum in metadata table " + table
                     + " for version " + version + " to " + checksum, e);
